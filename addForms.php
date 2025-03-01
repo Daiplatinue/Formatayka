@@ -142,7 +142,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $nationality = $_POST['nationality'];
             $religion = $_POST['religion'];
             
-            // Fix for Place of Birth fields
             $pob_bldg = $_POST['rm_flr_unit_no'];
             $pob_lot = $_POST['house_lot_blk_no'];
             $pob_street = $_POST['street_name'];
@@ -153,7 +152,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $pob_country = $_POST['country'];
             $pob_zip = $_POST['zip_code'];
             
-            // Fix for Home Address fields
             $home_bldg = $_POST['home_rm_flr_unit_no'];
             $home_lot = $_POST['home_house_lot_blk_no'];
             $home_street = $_POST['home_street_name'];

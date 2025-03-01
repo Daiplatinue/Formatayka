@@ -17,90 +17,65 @@ if ($conn->connect_error) {
 }
 
 if (isset($_GET['action'])) {
-    if ($_GET['action'] === 'delete' && isset($_GET['id'])) {
-        $formId = $_GET['id'];
-        
+    $action = $_GET['action'];
+    $formId = $_GET['id'] ?? null;
+    
+    if ($action === 'delete' && $formId && isset($_SESSION['forms'][$formId])) {
         try {
             $conn->begin_transaction();
+            $form = $_SESSION['forms'][$formId];
             
-            if (isset($_SESSION['forms'][$formId])) {
-                $form = $_SESSION['forms'][$formId];
+            $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
+            $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
+            $stmt->execute();
+            $result = $stmt->get_result();
+            
+            if ($row = $result->fetch_assoc()) {
+                $form_id = $row['f_id'];
+                $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
+                $delete_stmt->bind_param("i", $form_id);
+                $delete_stmt->execute();
+                $delete_stmt->close();
                 
-                $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
-                
-                $last_name = $form['last_name'];
-                $first_name = $form['first_name'];
-                $middle_name = $form['middle_name'];
-                $date = $form['date'];
-                
-                $stmt->bind_param("ssss", $last_name, $first_name, $middle_name, $date);
-                $stmt->execute();
-                $result = $stmt->get_result();
-                
-                if ($row = $result->fetch_assoc()) {
-                    $form_id = $row['f_id']; 
-                    
-                    $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
-                    $delete_stmt->bind_param("i", $form_id);
-                    $delete_stmt->execute();
-                    $delete_stmt->close();
-                    
-                    unset($_SESSION['forms'][$formId]);
-                    $_SESSION['message'] = "Form deleted successfully from database!";
-                    
-                    $conn->commit();
-                } else {
-                    unset($_SESSION['forms'][$formId]);
-                    $_SESSION['message'] = "Form deleted successfully!";
-                }
-                
-                $stmt->close();
+                unset($_SESSION['forms'][$formId]);
+                $_SESSION['message'] = "Form deleted successfully from database!";
+                $conn->commit();
+            } else {
+                unset($_SESSION['forms'][$formId]);
+                $_SESSION['message'] = "Form deleted successfully!";
             }
+            $stmt->close();
         } catch (Exception $e) {
             $conn->rollback();
             $_SESSION['message'] = "Error deleting form: " . $e->getMessage();
         }
-        
         header("Location: viewForms.php");
         exit();
     }
-
-    if ($_GET['action'] === 'view' && isset($_GET['id'])) {
-        $formId = $_GET['id'];
-        if (isset($_SESSION['forms'][$formId])) {
-            $_SESSION['view_form'] = $_SESSION['forms'][$formId];
-            $_SESSION['view_form_id'] = $formId;
-            header("Location: viewForms.php?mode=view&id=$formId");
-            exit();
-        }
+    
+    if ($action === 'view' && $formId && isset($_SESSION['forms'][$formId])) {
+        $_SESSION['view_form'] = $_SESSION['forms'][$formId];
+        $_SESSION['view_form_id'] = $formId;
+        header("Location: viewForms.php?mode=view&id=$formId");
+        exit();
     }
-
-    if ($_GET['action'] === 'edit' && isset($_GET['id'])) {
-        $formId = $_GET['id'];
-        if (isset($_SESSION['forms'][$formId])) {
-            $_SESSION['edit_form'] = $_SESSION['forms'][$formId];
-            $_SESSION['edit_form_id'] = $formId;
-            header("Location: addForms.php?edit=true");
-            exit();
-        }
+    
+    if ($action === 'edit' && $formId && isset($_SESSION['forms'][$formId])) {
+        $_SESSION['edit_form'] = $_SESSION['forms'][$formId];
+        $_SESSION['edit_form_id'] = $formId;
+        header("Location: addForms.php?edit=true");
+        exit();
     }
 }
 
 if (isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
     try {
         $conn->begin_transaction();
-        
         $formId = $_POST['form_id'];
         $form = $_SESSION['forms'][$formId];
         
         $check_stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
-        
-        $last_name = $form['last_name'];
-        $first_name = $form['first_name'];
-        $middle_name = $form['middle_name'];
-        $date = $form['date'];
-        
-        $check_stmt->bind_param("ssss", $last_name, $first_name, $middle_name, $date);
+        $check_stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
         $check_stmt->execute();
         $check_result = $check_stmt->get_result();
         
@@ -119,108 +94,95 @@ if (isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
                 f_mother_ln = ?, f_mother_fn = ?, f_mother_mi = ?,
                 f_age = ?
                 WHERE f_id = ?");
-            
+                
             $dob = new DateTime($_POST['date']);
             $now = new DateTime();
             $age = $now->diff($dob)->y;
             
-            $last_name = $_POST['last_name'];
-            $first_name = $_POST['first_name'];
-            $middle_name = $_POST['middle_name'];
-            $date = $_POST['date'];
-            $gender = $_POST['gender'];
             $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
-            $tin = $_POST['tin'];
-            $nationality = $_POST['nationality'];
-            $religion = $_POST['religion'];
             
-            // Fix for Place of Birth fields
-            $pob_bldg = $_POST['rm_flr_unit_no'];
-            $pob_lot = $_POST['house_lot_blk_no'];
-            $pob_street = $_POST['street_name'];
-            $pob_subdivision = $_POST['subdivision'];
-            $pob_barangay = $_POST['barangay'];
-            $pob_city = $_POST['city'];
-            $pob_province = $_POST['province'];
-            $pob_country = $_POST['country'];
-            $pob_zip = $_POST['zip_code'];
-            
-            // Fix for Home Address fields
-            $home_bldg = $_POST['home_rm_flr_unit_no'];
-            $home_lot = $_POST['home_house_lot_blk_no'];
-            $home_street = $_POST['home_street_name'];
-            $home_subdivision = $_POST['home_subdivision'];
-            $home_barangay = $_POST['home_barangay'];
-            $home_city = $_POST['home_city'];
-            $home_province = $_POST['home_province'];
-            $home_country = $_POST['home_country'];
-            $home_zip = $_POST['home_zip_code'];
-            
-            $mobile_number = $_POST['mobile_number'];
-            $email_address = $_POST['email_address'];
-            $telephone_number = $_POST['telephone_number'];
-            
-            $father_last_name = $_POST['father_last_name'];
-            $father_first_name = $_POST['father_first_name'];
-            $father_middle_name = $_POST['father_middle_name'];
-            
-            $mother_last_name = $_POST['mother_last_name'];
-            $mother_first_name = $_POST['mother_first_name'];
-            $mother_middle_name = $_POST['mother_middle_name'];
-            
-            $stmt->bind_param("ssssssssssssssssssssssssssssssssssssssi", 
-                $last_name, $first_name, $middle_name, $date, $gender, $civil_status, 
-                $tin, $nationality, $religion,
-                $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, 
-                $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
-                $home_bldg, $home_lot, $home_street, $home_subdivision, 
-                $home_barangay, $home_city, $home_province, $home_country, $home_zip,
-                $mobile_number, $email_address, $telephone_number,
-                $father_last_name, $father_first_name, $father_middle_name,
-                $mother_last_name, $mother_first_name, $mother_middle_name,
+            $stmt->bind_param(
+                "ssssssssssssssssssssssssssssssssssssssi",
+                $_POST['last_name'],
+                $_POST['first_name'],
+                $_POST['middle_name'],
+                $_POST['date'],
+                $_POST['gender'],
+                $civil_status,
+                $_POST['tin'],
+                $_POST['nationality'],
+                $_POST['religion'],
+                $_POST['rm_flr_unit_no'],
+                $_POST['house_lot_blk_no'],
+                $_POST['street_name'],
+                $_POST['subdivision'],
+                $_POST['barangay'],
+                $_POST['city'],
+                $_POST['province'],
+                $_POST['country'],
+                $_POST['zip_code'],
+                $_POST['home_rm_flr_unit_no'],
+                $_POST['home_house_lot_blk_no'],
+                $_POST['home_street_name'],
+                $_POST['home_subdivision'],
+                $_POST['home_barangay'],
+                $_POST['home_city'],
+                $_POST['home_province'],
+                $_POST['home_country'],
+                $_POST['home_zip_code'],
+                $_POST['mobile_number'],
+                $_POST['email_address'],
+                $_POST['telephone_number'],
+                $_POST['father_last_name'],
+                $_POST['father_first_name'],
+                $_POST['father_middle_name'],
+                $_POST['mother_last_name'],
+                $_POST['mother_first_name'],
+                $_POST['mother_middle_name'],
                 $age,
                 $form_id
             );
             $stmt->execute();
             
             $_SESSION['forms'][$formId] = [
-                'last_name' => $last_name,
-                'first_name' => $first_name,
-                'middle_name' => $middle_name,
-                'date' => $date,
-                'gender' => $gender,
+                'last_name' => $_POST['last_name'],
+                'first_name' => $_POST['first_name'],
+                'middle_name' => $_POST['middle_name'],
+                'date' => $_POST['date'],
+                'gender' => $_POST['gender'],
                 'civil_status' => $_POST['civil_status'],
                 'others' => $_POST['civil_status'] == 'others' ? $_POST['others'] : '',
-                'tin' => $tin,
-                'nationality' => $nationality,
-                'religion' => $religion,
-                'rm_flr_unit_no' => $pob_bldg,
-                'house_lot_blk_no' => $pob_lot,
-                'street_name' => $pob_street,
-                'subdivision' => $pob_subdivision,
-                'barangay' => $pob_barangay,
-                'city' => $pob_city,
-                'province' => $pob_province,
-                'country' => $pob_country,
-                'zip_code' => $pob_zip,
-                'home_rm_flr_unit_no' => $home_bldg,
-                'home_house_lot_blk_no' => $home_lot,
-                'home_street_name' => $home_street,
-                'home_subdivision' => $home_subdivision,
-                'home_barangay' => $home_barangay,
-                'home_city' => $home_city,
-                'home_province' => $home_province,
-                'home_country' => $home_country,
-                'home_zip_code' => $home_zip,
-                'mobile_number' => $mobile_number,
-                'email_address' => $email_address,
-                'telephone_number' => $telephone_number,
-                'father_last_name' => $father_last_name,
-                'father_first_name' => $father_first_name,
-                'father_middle_name' => $father_middle_name,
-                'mother_last_name' => $mother_last_name,
-                'mother_first_name' => $mother_first_name,
-                'mother_middle_name' => $mother_middle_name
+                'tin' => $_POST['tin'],
+                'nationality' => $_POST['nationality'],
+                'religion' => $_POST['religion'],
+                'rm_flr_unit_no' => $_POST['rm_flr_unit_no'],
+                'house_lot_blk_no' => $_POST['house_lot_blk_no'],
+                'street_name' => $_POST['street_name'],
+                'subdivision' => $_POST['subdivision'],
+                'barangay' => $_POST['barangay'],
+                'city' => $_POST['city'],
+                'province' => $_POST['province'],
+                'country' => $_POST['country'],
+                'zip_code' => $_POST['zip_code'],
+                'home_rm_flr_unit_no' => $_POST['home_rm_flr_unit_no'],
+                'home_house_lot_blk_no' => $_POST['home_house_lot_blk_no'],
+                'home_street_name' => $_POST['home_street_name'],
+                'home_subdivision' => $_POST['home_subdivision'],
+                'home_barangay' => $_POST['home_barangay'],
+                'home_city' => $_POST['home_city'],
+                'home_province' => $_POST['home_province'],
+                'home_country' => $_POST['home_country'],
+                'home_zip_code' => $_POST['home_zip_code'],
+                'mobile_number' => $_POST['mobile_number'],
+                'email_address' => $_POST['email_address'],
+                'telephone_number' => $_POST['telephone_number'],
+                'father_last_name' => $_POST['father_last_name'],
+                'father_first_name' => $_POST['father_first_name'],
+                'father_middle_name' => $_POST['father_middle_name'],
+                'mother_last_name' => $_POST['mother_last_name'],
+                'mother_first_name' => $_POST['mother_first_name'],
+                'mother_middle_name' => $_POST['mother_middle_name'],
+                'f_id' => $form_id
             ];
             
             $conn->commit();
@@ -237,6 +199,20 @@ if (isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
     
     header("Location: viewForms.php");
     exit();
+}
+
+foreach ($_SESSION['forms'] as $id => &$form) {
+    if (!isset($form['f_id'])) {
+        $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
+        $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        
+        if ($row = $result->fetch_assoc()) {
+            $form['f_id'] = $row['f_id'];
+        }
+        $stmt->close();
+    }
 }
 
 $message = '';
@@ -267,7 +243,7 @@ if (!empty($forms)) {
     uasort($forms, function ($a, $b) use ($sortBy, $sortOrder) {
         $valueA = $a[$sortBy] ?? '';
         $valueB = $b[$sortBy] ?? '';
-
+        
         if ($sortOrder === 'asc') {
             return strcasecmp($valueA, $valueB);
         } else {
@@ -287,17 +263,14 @@ $paginatedForms = array_slice($forms, $offset, $formsPerPage, true);
 function calculateAge($dob)
 {
     if (empty($dob)) return '';
-
+    
     $birthDate = new DateTime($dob);
-    $currentYear = 2025;
-    $birthYear = $birthDate->format('Y');
-
-    return $currentYear - $birthYear;
+    $currentDate = new DateTime();
+    return $currentDate->diff($birthDate)->y;
 }
 ?>
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -305,7 +278,6 @@ function calculateAge($dob)
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
     <title>View Forms - Form Management</title>
 </head>
-
 <body>
     <div class="dashboard-container">
         <!-- Sidebar -->
@@ -379,6 +351,9 @@ function calculateAge($dob)
                         <h2>
                             <i class="fas fa-user"></i>
                             <?php echo htmlspecialchars($viewForm['last_name'] . ', ' . $viewForm['first_name'] . ' ' . ($viewForm['middle_name'] ?? '')); ?>
+                            <?php if (isset($viewForm['f_id'])): ?>
+                                <span class="form-id" >(ID: <?php echo htmlspecialchars($viewForm['f_id']); ?>)</span>
+                            <?php endif; ?>
                         </h2>
                         <div class="view-actions">
                             <a href="viewForms.php" class="btn secondary">
@@ -618,7 +593,12 @@ function calculateAge($dob)
                                             <i class="fas fa-user"></i>
                                         </div>
                                         <div class="form-name">
-                                            <h3><?php echo htmlspecialchars($form['last_name'] . ', ' . $form['first_name'] . ' ' . ($form['middle_name'] ?? '')); ?></h3>
+                                            <h3>
+                                                <?php echo htmlspecialchars($form['last_name'] . ', ' . $form['first_name'] . ' ' . $form['middle_name']); ?>
+                                                <?php if (isset($form['f_id'])): ?>
+                                                    <span class="form-id">(ID: <?php echo htmlspecialchars($form['f_id']); ?>)</span>
+                                                <?php endif; ?>
+                                            </h3>
                                         </div>
                                     </div>
 
@@ -627,7 +607,6 @@ function calculateAge($dob)
                                             <div class="detail-icon">
                                                 <i class="fas fa-envelope"></i>
                                             </div>
-                                            <div class="detail-label">Email:</div>
                                             <div class="detail-value"><?php echo htmlspecialchars($form['email_address'] ?? ''); ?></div>
                                         </div>
 
@@ -635,7 +614,6 @@ function calculateAge($dob)
                                             <div class="detail-icon">
                                                 <i class="fas fa-phone"></i>
                                             </div>
-                                            <div class="detail-label">Mobile:</div>
                                             <div class="detail-value"><?php echo htmlspecialchars($form['mobile_number'] ?? ''); ?></div>
                                         </div>
 
@@ -643,7 +621,6 @@ function calculateAge($dob)
                                             <div class="detail-icon">
                                                 <i class="fas fa-birthday-cake"></i>
                                             </div>
-                                            <div class="detail-label">DOB:</div>
                                             <div class="detail-value">
                                                 <?php
                                                 echo htmlspecialchars($form['date'] ?? '');
@@ -659,7 +636,6 @@ function calculateAge($dob)
                                             <div class="detail-icon">
                                                 <i class="fas fa-map-marker-alt"></i>
                                             </div>
-                                            <div class="detail-label">City:</div>
                                             <div class="detail-value"><?php echo htmlspecialchars($form['home_city'] ?? $form['city'] ?? ''); ?></div>
                                         </div>
                                     </div>
@@ -707,57 +683,25 @@ function calculateAge($dob)
             <?php endif; ?>
         </main>
     </div>
-
+    
     <script>
-        function searchForms() {
-            const input = document.getElementById('searchInput');
-            const filter = input.value.toUpperCase();
-            const grid = document.getElementById('formsGrid');
-            const cards = grid.getElementsByClassName('form-card');
-
-            let noResults = true;
-
-            for (let i = 0; i < cards.length; i++) {
-                const nameElement = cards[i].querySelector('.form-name h3');
-                const emailElement = cards[i].querySelector('.detail-row:nth-child(1) .detail-value');
-                const mobileElement = cards[i].querySelector('.detail-row:nth-child(2) .detail-value');
-
-                if (nameElement || emailElement || mobileElement) {
-                    const nameText = nameElement ? nameElement.textContent || nameElement.innerText : '';
-                    const emailText = emailElement ? emailElement.textContent || emailElement.innerText : '';
-                    const mobileText = mobileElement ? mobileElement.textContent || mobileElement.innerText : '';
-
-                    if (nameText.toUpperCase().indexOf(filter) > -1 ||
-                        emailText.toUpperCase().indexOf(filter) > -1 ||
-                        mobileText.toUpperCase().indexOf(filter) > -1) {
-                        cards[i].style.display = '';
-                        noResults = false;
-                    } else {
-                        cards[i].style.display = 'none';
-                    }
-                }
-            }
-
-            let noFormsElement = grid.querySelector('.no-forms');
-
-            if (filter && noResults && !noFormsElement) {
-                noFormsElement = document.createElement('div');
-                noFormsElement.className = 'no-forms';
-                noFormsElement.innerHTML = `
-                    <i class="fas fa-search" style="font-size: 48px; color: var(--gray-light); margin-bottom: 20px;"></i>
-                    <h3 style="margin-bottom: 10px;">No Matching Forms</h3>
-                    <p>No forms match your search criteria.</p>
-                `;
-
-                while (grid.firstChild) {
-                    grid.removeChild(grid.firstChild);
-                }
-                grid.appendChild(noFormsElement);
-            } else if (!noResults && noFormsElement) {
-                noFormsElement.remove();
+    function searchForms() {
+        const input = document.getElementById('searchInput');
+        const filter = input.value.toUpperCase();
+        const grid = document.getElementById('formsGrid');
+        const cards = grid.getElementsByClassName('form-card');
+        
+        for (let i = 0; i < cards.length; i++) {
+            const name = cards[i].getElementsByClassName('form-name')[0];
+            const txtValue = name.textContent || name.innerText;
+            
+            if (txtValue.toUpperCase().indexOf(filter) > -1) {
+                cards[i].style.display = "";
+            } else {
+                cards[i].style.display = "none";
             }
         }
+    }
     </script>
 </body>
-
 </html>
