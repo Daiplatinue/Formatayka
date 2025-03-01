@@ -75,7 +75,6 @@ $randomNewsQuote = $newsQuotes[array_rand($newsQuotes)];
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="profile">
                 <div class="avatar">
@@ -110,9 +109,7 @@ $randomNewsQuote = $newsQuotes[array_rand($newsQuotes)];
             </div>
         </aside>
         
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="dashboard-header">
                 <div class="header-left">
                     <h1>Dashboard</h1>
@@ -141,7 +138,6 @@ $randomNewsQuote = $newsQuotes[array_rand($newsQuotes)];
                 </div>
             <?php endif; ?>
             
-            <!-- Stats Cards -->
             <div class="stats-container">
                 <div class="stat-card blue">
                     <div class="stat-icon">
@@ -270,31 +266,5 @@ $randomNewsQuote = $newsQuotes[array_rand($newsQuotes)];
             </div>
         </main>
     </div>
-
-    <script>
-        function toggleDropdown(id) {
-            var dropdown = document.getElementById('dropdown-' + id);
-            
-            var allDropdowns = document.querySelectorAll('.dropdown-menu');
-            allDropdowns.forEach(function(menu) {
-                if (menu.id !== 'dropdown-' + id) {
-                    menu.style.display = 'none';
-                }
-            });
-            
-            if (dropdown.style.display === 'block') {
-                dropdown.style.display = 'none';
-            } else {
-                dropdown.style.display = 'block';
-            }
-            
-            document.addEventListener('click', function closeDropdown(e) {
-                if (!e.target.matches('.dropdown-toggle') && !e.target.closest('.dropdown-menu')) {
-                    dropdown.style.display = 'none';
-                    document.removeEventListener('click', closeDropdown);
-                }
-            });
-        }
-    </script>
 </body>
 </html>

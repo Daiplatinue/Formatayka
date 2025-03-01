@@ -24,6 +24,14 @@ function validate_input($data)
     return $data;
 }
 
+function normalize_spaces($data)
+{
+    if (is_string($data)) {
+        return preg_replace('/\s+/', ' ', trim($data));
+    }
+    return $data;
+}
+
 $editMode = false;
 $editFormId = '';
 $formData = [];
@@ -34,7 +42,6 @@ if (isset($_GET['edit']) && $_GET['edit'] === 'true' && isset($_SESSION['edit_fo
     $editFormId = $_SESSION['edit_form_id'];
     $formData = $_SESSION['edit_form'];
     
-    // Get the database ID if it exists
     if (isset($formData['f_id'])) {
         $formDbId = $formData['f_id'];
     }
@@ -55,6 +62,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'mobile_number' => 'Mobile Number',
         'email_address' => 'Email Address'
     ];
+
+    foreach ($_POST as $key => $value) {
+        if (is_string($value)) {
+            $_POST[$key] = normalize_spaces($value);
+        }
+    }
 
     foreach ($required_fields as $field => $label) {
         if (empty(trim($_POST[$field] ?? ''))) {
@@ -121,9 +134,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn->begin_transaction();
         
         try {
-            // Check if we're updating an existing record
             if (isset($_POST['db_id']) && !empty($_POST['db_id'])) {
-                // UPDATE existing record
                 $stmt = $conn->prepare("UPDATE form_tb SET 
                     f_ln = ?, f_fn = ?, f_mi = ?, f_dob = ?, f_sex = ?, f_civil = ?, 
                     f_tin = ?, f_nationality = ?, f_religion = ?,
@@ -197,7 +208,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 
                 $_SESSION['message'] = "Form updated successfully in database!";
             } else {
-                // INSERT new record
                 $stmt = $conn->prepare("INSERT INTO form_tb (
                     f_ln, f_fn, f_mi, f_dob, f_sex, f_civil, f_tin, f_nationality, f_religion,
                     f_pob_bldg, f_pob_lot, f_pob_street, f_pob_subdivision, f_pob_barangay, f_pob_city, f_pob_province, f_pob_country, f_pob_zip,
@@ -356,7 +366,6 @@ function showOthersField()
 
 <body>
     <div class="dashboard-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="profile">
                 <div class="avatar">
@@ -391,9 +400,7 @@ function showOthersField()
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
-            <!-- Header -->
             <header class="dashboard-header">
                 <div class="header-left">
                     <h1><?php echo $editMode ? 'Edit Form' : 'Add New Form'; ?></h1>

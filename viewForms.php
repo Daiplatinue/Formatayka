@@ -77,7 +77,6 @@ if (isset($_GET['action'])) {
     }
 }
 
-// Direct update from viewForms.php
 if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
     try {
         $conn->begin_transaction();
@@ -86,8 +85,6 @@ if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION[
         
         if (isset($form['f_id'])) {
             $db_id = $form['f_id'];
-            
-            // Set up the edit form data and redirect to addForms.php
             $_SESSION['edit_form'] = $form;
             $_SESSION['edit_form_id'] = $formId;
             
@@ -106,7 +103,6 @@ if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION[
     exit();
 }
 
-// Sync database IDs with session forms
 foreach ($_SESSION['forms'] as $id => &$form) {
     if (!isset($form['f_id'])) {
         $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
@@ -121,7 +117,6 @@ foreach ($_SESSION['forms'] as $id => &$form) {
     }
 }
 
-// Load forms directly from database if session is empty
 if (empty($_SESSION['forms'])) {
     $stmt = $conn->prepare("SELECT * FROM form_tb");
     $stmt->execute();
@@ -239,7 +234,6 @@ function calculateAge($dob)
 </head>
 <body>
     <div class="dashboard-container">
-        <!-- Sidebar -->
         <aside class="sidebar">
             <div class="profile">
                 <div class="avatar">
@@ -274,7 +268,6 @@ function calculateAge($dob)
             </div>
         </aside>
 
-        <!-- Main Content -->
         <main class="main-content">
             <header class="dashboard-header">
                 <div class="header-left">
@@ -648,25 +641,5 @@ function calculateAge($dob)
             <?php endif; ?>
         </main>
     </div>
-    
-    <script>
-    function searchForms() {
-        const input = document.getElementById('searchInput');
-        const filter = input.value.toUpperCase();
-        const grid = document.getElementById('formsGrid');
-        const cards = grid.getElementsByClassName('form-card');
-        
-        for (let i = 0; i < cards.length; i++) {
-            const name = cards[i].getElementsByClassName('form-name')[0];
-            const txtValue = name.textContent || name.innerText;
-            
-            if (txtValue.toUpperCase().indexOf(filter) > -1) {
-                cards[i].style.display = "";
-            } else {
-                cards[i].style.display = "none";
-            }
-        }
-    }
-    </script>
 </body>
 </html>
