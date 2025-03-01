@@ -27,11 +27,18 @@ function validate_input($data)
 $editMode = false;
 $editFormId = '';
 $formData = [];
+$formDbId = null;
 
 if (isset($_GET['edit']) && $_GET['edit'] === 'true' && isset($_SESSION['edit_form']) && isset($_SESSION['edit_form_id'])) {
     $editMode = true;
     $editFormId = $_SESSION['edit_form_id'];
     $formData = $_SESSION['edit_form'];
+    
+    // Get the database ID if it exists
+    if (isset($formData['f_id'])) {
+        $formDbId = $formData['f_id'];
+    }
+    
     unset($_SESSION['edit_form']);
     unset($_SESSION['edit_form_id']);
 }
@@ -114,79 +121,159 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $conn->begin_transaction();
         
         try {
-            $stmt = $conn->prepare("INSERT INTO form_tb (
-                f_ln, f_fn, f_mi, f_dob, f_sex, f_civil, f_tin, f_nationality, f_religion,
-                f_pob_bldg, f_pob_lot, f_pob_street, f_pob_subdivision, f_pob_barangay, f_pob_city, f_pob_province, f_pob_country, f_pob_zip,
-                f_home_bldg, f_home_lot, f_home_street, f_home_subdivision, f_home_barangay, f_home_city, f_home_province, f_home_country, f_home_zip,
-                f_home_mobile, f_home_email, f_home_telephone,
-                f_father_ln, f_father_fn, f_father_mi,
-                f_mother_ln, f_mother_fn, f_mother_mi,
-                f_age
-            ) VALUES (
-                ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?, ?, ?,
-                ?
-            )");
-            
-            $last_name = $_POST['last_name'];
-            $first_name = $_POST['first_name'];
-            $middle_name = $_POST['middle_name'];
-            $date = $_POST['date'];
-            $gender = $_POST['gender'];
-            $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
-            $tin = $_POST['tin'];
-            $nationality = $_POST['nationality'];
-            $religion = $_POST['religion'];
-            
-            $pob_bldg = $_POST['rm_flr_unit_no'];
-            $pob_lot = $_POST['house_lot_blk_no'];
-            $pob_street = $_POST['street_name'];
-            $pob_subdivision = $_POST['subdivision'];
-            $pob_barangay = $_POST['barangay'];
-            $pob_city = $_POST['city'];
-            $pob_province = $_POST['province'];
-            $pob_country = $_POST['country'];
-            $pob_zip = $_POST['zip_code'];
-            
-            $home_bldg = $_POST['home_rm_flr_unit_no'];
-            $home_lot = $_POST['home_house_lot_blk_no'];
-            $home_street = $_POST['home_street_name'];
-            $home_subdivision = $_POST['home_subdivision'];
-            $home_barangay = $_POST['home_barangay'];
-            $home_city = $_POST['home_city'];
-            $home_province = $_POST['home_province'];
-            $home_country = $_POST['home_country'];
-            $home_zip = $_POST['home_zip_code'];
-            
-            $mobile_number = $_POST['mobile_number'];
-            $email_address = $_POST['email_address'];
-            $telephone_number = $_POST['telephone_number'];
-            
-            $father_last_name = $_POST['father_last_name'];
-            $father_first_name = $_POST['father_first_name'];
-            $father_middle_name = $_POST['father_middle_name'];
-            
-            $mother_last_name = $_POST['mother_last_name'];
-            $mother_first_name = $_POST['mother_first_name'];
-            $mother_middle_name = $_POST['mother_middle_name'];
-            
-            $stmt->bind_param("ssssssssssssssssssssssssssssssssssssi", 
-                $last_name, $first_name, $middle_name, $date, $gender, $civil_status, $tin, $nationality, $religion,
-                $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
-                $home_bldg, $home_lot, $home_street, $home_subdivision, $home_barangay, $home_city, $home_province, $home_country, $home_zip,
-                $mobile_number, $email_address, $telephone_number,
-                $father_last_name, $father_first_name, $father_middle_name,
-                $mother_last_name, $mother_first_name, $mother_middle_name,
-                $age
-            );
-            
-            $stmt->execute();
-            $form_id = $conn->insert_id;
-            $stmt->close();
+            // Check if we're updating an existing record
+            if (isset($_POST['db_id']) && !empty($_POST['db_id'])) {
+                // UPDATE existing record
+                $stmt = $conn->prepare("UPDATE form_tb SET 
+                    f_ln = ?, f_fn = ?, f_mi = ?, f_dob = ?, f_sex = ?, f_civil = ?, 
+                    f_tin = ?, f_nationality = ?, f_religion = ?,
+                    f_pob_bldg = ?, f_pob_lot = ?, f_pob_street = ?, f_pob_subdivision = ?, 
+                    f_pob_barangay = ?, f_pob_city = ?, f_pob_province = ?, f_pob_country = ?, f_pob_zip = ?,
+                    f_home_bldg = ?, f_home_lot = ?, f_home_street = ?, f_home_subdivision = ?, 
+                    f_home_barangay = ?, f_home_city = ?, f_home_province = ?, f_home_country = ?, f_home_zip = ?,
+                    f_home_mobile = ?, f_home_email = ?, f_home_telephone = ?,
+                    f_father_ln = ?, f_father_fn = ?, f_father_mi = ?,
+                    f_mother_ln = ?, f_mother_fn = ?, f_mother_mi = ?,
+                    f_age = ?
+                    WHERE f_id = ?");
+                
+                $last_name = $_POST['last_name'];
+                $first_name = $_POST['first_name'];
+                $middle_name = $_POST['middle_name'];
+                $date = $_POST['date'];
+                $gender = $_POST['gender'];
+                $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
+                $tin = $_POST['tin'];
+                $nationality = $_POST['nationality'];
+                $religion = $_POST['religion'];
+                
+                $pob_bldg = $_POST['rm_flr_unit_no'];
+                $pob_lot = $_POST['house_lot_blk_no'];
+                $pob_street = $_POST['street_name'];
+                $pob_subdivision = $_POST['subdivision'];
+                $pob_barangay = $_POST['barangay'];
+                $pob_city = $_POST['city'];
+                $pob_province = $_POST['province'];
+                $pob_country = $_POST['country'];
+                $pob_zip = $_POST['zip_code'];
+                
+                $home_bldg = $_POST['home_rm_flr_unit_no'];
+                $home_lot = $_POST['home_house_lot_blk_no'];
+                $home_street = $_POST['home_street_name'];
+                $home_subdivision = $_POST['home_subdivision'];
+                $home_barangay = $_POST['home_barangay'];
+                $home_city = $_POST['home_city'];
+                $home_province = $_POST['home_province'];
+                $home_country = $_POST['home_country'];
+                $home_zip = $_POST['home_zip_code'];
+                
+                $mobile_number = $_POST['mobile_number'];
+                $email_address = $_POST['email_address'];
+                $telephone_number = $_POST['telephone_number'];
+                
+                $father_last_name = $_POST['father_last_name'];
+                $father_first_name = $_POST['father_first_name'];
+                $father_middle_name = $_POST['father_middle_name'];
+                
+                $mother_last_name = $_POST['mother_last_name'];
+                $mother_first_name = $_POST['mother_first_name'];
+                $mother_middle_name = $_POST['mother_middle_name'];
+                
+                $db_id = $_POST['db_id'];
+                
+                $stmt->bind_param("sssssssssssssssssssssssssssssssssssssi", 
+                    $last_name, $first_name, $middle_name, $date, $gender, $civil_status, $tin, $nationality, $religion,
+                    $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
+                    $home_bldg, $home_lot, $home_street, $home_subdivision, $home_barangay, $home_city, $home_province, $home_country, $home_zip,
+                    $mobile_number, $email_address, $telephone_number,
+                    $father_last_name, $father_first_name, $father_middle_name,
+                    $mother_last_name, $mother_first_name, $mother_middle_name,
+                    $age, $db_id
+                );
+                
+                $stmt->execute();
+                $form_id = $db_id;
+                $stmt->close();
+                
+                $_SESSION['message'] = "Form updated successfully in database!";
+            } else {
+                // INSERT new record
+                $stmt = $conn->prepare("INSERT INTO form_tb (
+                    f_ln, f_fn, f_mi, f_dob, f_sex, f_civil, f_tin, f_nationality, f_religion,
+                    f_pob_bldg, f_pob_lot, f_pob_street, f_pob_subdivision, f_pob_barangay, f_pob_city, f_pob_province, f_pob_country, f_pob_zip,
+                    f_home_bldg, f_home_lot, f_home_street, f_home_subdivision, f_home_barangay, f_home_city, f_home_province, f_home_country, f_home_zip,
+                    f_home_mobile, f_home_email, f_home_telephone,
+                    f_father_ln, f_father_fn, f_father_mi,
+                    f_mother_ln, f_mother_fn, f_mother_mi,
+                    f_age
+                ) VALUES (
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?, ?, ?,
+                    ?
+                )");
+                
+                $last_name = $_POST['last_name'];
+                $first_name = $_POST['first_name'];
+                $middle_name = $_POST['middle_name'];
+                $date = $_POST['date'];
+                $gender = $_POST['gender'];
+                $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
+                $tin = $_POST['tin'];
+                $nationality = $_POST['nationality'];
+                $religion = $_POST['religion'];
+                
+                $pob_bldg = $_POST['rm_flr_unit_no'];
+                $pob_lot = $_POST['house_lot_blk_no'];
+                $pob_street = $_POST['street_name'];
+                $pob_subdivision = $_POST['subdivision'];
+                $pob_barangay = $_POST['barangay'];
+                $pob_city = $_POST['city'];
+                $pob_province = $_POST['province'];
+                $pob_country = $_POST['country'];
+                $pob_zip = $_POST['zip_code'];
+                
+                $home_bldg = $_POST['home_rm_flr_unit_no'];
+                $home_lot = $_POST['home_house_lot_blk_no'];
+                $home_street = $_POST['home_street_name'];
+                $home_subdivision = $_POST['home_subdivision'];
+                $home_barangay = $_POST['home_barangay'];
+                $home_city = $_POST['home_city'];
+                $home_province = $_POST['home_province'];
+                $home_country = $_POST['home_country'];
+                $home_zip = $_POST['home_zip_code'];
+                
+                $mobile_number = $_POST['mobile_number'];
+                $email_address = $_POST['email_address'];
+                $telephone_number = $_POST['telephone_number'];
+                
+                $father_last_name = $_POST['father_last_name'];
+                $father_first_name = $_POST['father_first_name'];
+                $father_middle_name = $_POST['father_middle_name'];
+                
+                $mother_last_name = $_POST['mother_last_name'];
+                $mother_first_name = $_POST['mother_first_name'];
+                $mother_middle_name = $_POST['mother_middle_name'];
+                
+                $stmt->bind_param("ssssssssssssssssssssssssssssssssssssi", 
+                    $last_name, $first_name, $middle_name, $date, $gender, $civil_status, $tin, $nationality, $religion,
+                    $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
+                    $home_bldg, $home_lot, $home_street, $home_subdivision, $home_barangay, $home_city, $home_province, $home_country, $home_zip,
+                    $mobile_number, $email_address, $telephone_number,
+                    $father_last_name, $father_first_name, $father_middle_name,
+                    $mother_last_name, $mother_first_name, $mother_middle_name,
+                    $age
+                );
+                
+                $stmt->execute();
+                $form_id = $conn->insert_id;
+                $stmt->close();
+                
+                $_SESSION['message'] = "Form added successfully and saved to database!";
+            }
             
             $conn->commit();
             
@@ -199,12 +286,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $formId = $_POST['form_id'];
                 if (isset($_SESSION['forms'][$formId])) {
                     $_SESSION['forms'][$formId] = $_POST;
-                    $_SESSION['message'] = "Form updated successfully and saved to database!";
+                    $_SESSION['forms'][$formId]['f_id'] = $form_id;
                 }
             } else {
                 $formId = uniqid();
                 $_SESSION['forms'][$formId] = $_POST;
-                $_SESSION['message'] = "Form added successfully and saved to database!";
+                $_SESSION['forms'][$formId]['f_id'] = $form_id;
             }
 
             header("Location: index.php");
@@ -346,6 +433,9 @@ function showOthersField()
                         <input type="hidden" name="form_id" value="<?php echo $editFormId; ?>">
                         <input type="hidden" name="status" value="<?php echo htmlspecialchars($formData['status'] ?? 'pending'); ?>">
                         <input type="hidden" name="submission_date" value="<?php echo htmlspecialchars($formData['submission_date'] ?? date('Y-m-d H:i:s')); ?>">
+                        <?php if (isset($formData['f_id'])): ?>
+                            <input type="hidden" name="db_id" value="<?php echo htmlspecialchars($formData['f_id']); ?>">
+                        <?php endif; ?>
                     <?php endif; ?>
 
                     <div class="form-section">

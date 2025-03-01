@@ -25,13 +25,8 @@ if (isset($_GET['action'])) {
             $conn->begin_transaction();
             $form = $_SESSION['forms'][$formId];
             
-            $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
-            $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
-            $stmt->execute();
-            $result = $stmt->get_result();
-            
-            if ($row = $result->fetch_assoc()) {
-                $form_id = $row['f_id'];
+            if (isset($form['f_id'])) {
+                $form_id = $form['f_id'];
                 $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
                 $delete_stmt->bind_param("i", $form_id);
                 $delete_stmt->execute();
@@ -41,10 +36,24 @@ if (isset($_GET['action'])) {
                 $_SESSION['message'] = "Form deleted successfully from database!";
                 $conn->commit();
             } else {
+                $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
+                $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
+                $stmt->execute();
+                $result = $stmt->get_result();
+                
+                if ($row = $result->fetch_assoc()) {
+                    $form_id = $row['f_id'];
+                    $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
+                    $delete_stmt->bind_param("i", $form_id);
+                    $delete_stmt->execute();
+                    $delete_stmt->close();
+                }
+                
                 unset($_SESSION['forms'][$formId]);
                 $_SESSION['message'] = "Form deleted successfully!";
+                $stmt->close();
+                $conn->commit();
             }
-            $stmt->close();
         } catch (Exception $e) {
             $conn->rollback();
             $_SESSION['message'] = "Error deleting form: " . $e->getMessage();
@@ -68,139 +77,36 @@ if (isset($_GET['action'])) {
     }
 }
 
-if (isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
+// Direct update from viewForms.php
+if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
     try {
         $conn->begin_transaction();
         $formId = $_POST['form_id'];
         $form = $_SESSION['forms'][$formId];
         
-        $check_stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
-        $check_stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
-        $check_stmt->execute();
-        $check_result = $check_stmt->get_result();
-        
-        if ($check_row = $check_result->fetch_assoc()) {
-            $form_id = $check_row['f_id'];
+        if (isset($form['f_id'])) {
+            $db_id = $form['f_id'];
             
-            $stmt = $conn->prepare("UPDATE form_tb SET 
-                f_ln = ?, f_fn = ?, f_mi = ?, f_dob = ?, f_sex = ?, f_civil = ?, 
-                f_tin = ?, f_nationality = ?, f_religion = ?,
-                f_pob_bldg = ?, f_pob_lot = ?, f_pob_street = ?, f_pob_subdivision = ?, 
-                f_pob_barangay = ?, f_pob_city = ?, f_pob_province = ?, f_pob_country = ?, f_pob_zip = ?,
-                f_home_bldg = ?, f_home_lot = ?, f_home_street = ?, f_home_subdivision = ?, 
-                f_home_barangay = ?, f_home_city = ?, f_home_province = ?, f_home_country = ?, f_home_zip = ?,
-                f_home_mobile = ?, f_home_email = ?, f_home_telephone = ?,
-                f_father_ln = ?, f_father_fn = ?, f_father_mi = ?,
-                f_mother_ln = ?, f_mother_fn = ?, f_mother_mi = ?,
-                f_age = ?
-                WHERE f_id = ?");
-                
-            $dob = new DateTime($_POST['date']);
-            $now = new DateTime();
-            $age = $now->diff($dob)->y;
-            
-            $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
-            
-            $stmt->bind_param(
-                "ssssssssssssssssssssssssssssssssssssssi",
-                $_POST['last_name'],
-                $_POST['first_name'],
-                $_POST['middle_name'],
-                $_POST['date'],
-                $_POST['gender'],
-                $civil_status,
-                $_POST['tin'],
-                $_POST['nationality'],
-                $_POST['religion'],
-                $_POST['rm_flr_unit_no'],
-                $_POST['house_lot_blk_no'],
-                $_POST['street_name'],
-                $_POST['subdivision'],
-                $_POST['barangay'],
-                $_POST['city'],
-                $_POST['province'],
-                $_POST['country'],
-                $_POST['zip_code'],
-                $_POST['home_rm_flr_unit_no'],
-                $_POST['home_house_lot_blk_no'],
-                $_POST['home_street_name'],
-                $_POST['home_subdivision'],
-                $_POST['home_barangay'],
-                $_POST['home_city'],
-                $_POST['home_province'],
-                $_POST['home_country'],
-                $_POST['home_zip_code'],
-                $_POST['mobile_number'],
-                $_POST['email_address'],
-                $_POST['telephone_number'],
-                $_POST['father_last_name'],
-                $_POST['father_first_name'],
-                $_POST['father_middle_name'],
-                $_POST['mother_last_name'],
-                $_POST['mother_first_name'],
-                $_POST['mother_middle_name'],
-                $age,
-                $form_id
-            );
-            $stmt->execute();
-            
-            $_SESSION['forms'][$formId] = [
-                'last_name' => $_POST['last_name'],
-                'first_name' => $_POST['first_name'],
-                'middle_name' => $_POST['middle_name'],
-                'date' => $_POST['date'],
-                'gender' => $_POST['gender'],
-                'civil_status' => $_POST['civil_status'],
-                'others' => $_POST['civil_status'] == 'others' ? $_POST['others'] : '',
-                'tin' => $_POST['tin'],
-                'nationality' => $_POST['nationality'],
-                'religion' => $_POST['religion'],
-                'rm_flr_unit_no' => $_POST['rm_flr_unit_no'],
-                'house_lot_blk_no' => $_POST['house_lot_blk_no'],
-                'street_name' => $_POST['street_name'],
-                'subdivision' => $_POST['subdivision'],
-                'barangay' => $_POST['barangay'],
-                'city' => $_POST['city'],
-                'province' => $_POST['province'],
-                'country' => $_POST['country'],
-                'zip_code' => $_POST['zip_code'],
-                'home_rm_flr_unit_no' => $_POST['home_rm_flr_unit_no'],
-                'home_house_lot_blk_no' => $_POST['home_house_lot_blk_no'],
-                'home_street_name' => $_POST['home_street_name'],
-                'home_subdivision' => $_POST['home_subdivision'],
-                'home_barangay' => $_POST['home_barangay'],
-                'home_city' => $_POST['home_city'],
-                'home_province' => $_POST['home_province'],
-                'home_country' => $_POST['home_country'],
-                'home_zip_code' => $_POST['home_zip_code'],
-                'mobile_number' => $_POST['mobile_number'],
-                'email_address' => $_POST['email_address'],
-                'telephone_number' => $_POST['telephone_number'],
-                'father_last_name' => $_POST['father_last_name'],
-                'father_first_name' => $_POST['father_first_name'],
-                'father_middle_name' => $_POST['father_middle_name'],
-                'mother_last_name' => $_POST['mother_last_name'],
-                'mother_first_name' => $_POST['mother_first_name'],
-                'mother_middle_name' => $_POST['mother_middle_name'],
-                'f_id' => $form_id
-            ];
+            // Set up the edit form data and redirect to addForms.php
+            $_SESSION['edit_form'] = $form;
+            $_SESSION['edit_form_id'] = $formId;
             
             $conn->commit();
-            $_SESSION['message'] = "Form updated successfully in database!";
+            header("Location: addForms.php?edit=true");
+            exit();
         } else {
-            $_SESSION['message'] = "Error: Could not find the record to update.";
+            $_SESSION['message'] = "Error: Could not find the database record to update.";
         }
-        
-        $check_stmt->close();
     } catch (Exception $e) {
         $conn->rollback();
-        $_SESSION['message'] = "Error updating form: " . $e->getMessage();
+        $_SESSION['message'] = "Error preparing form for update: " . $e->getMessage();
     }
     
     header("Location: viewForms.php");
     exit();
 }
 
+// Sync database IDs with session forms
 foreach ($_SESSION['forms'] as $id => &$form) {
     if (!isset($form['f_id'])) {
         $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
@@ -213,6 +119,59 @@ foreach ($_SESSION['forms'] as $id => &$form) {
         }
         $stmt->close();
     }
+}
+
+// Load forms directly from database if session is empty
+if (empty($_SESSION['forms'])) {
+    $stmt = $conn->prepare("SELECT * FROM form_tb");
+    $stmt->execute();
+    $result = $stmt->get_result();
+    
+    while ($row = $result->fetch_assoc()) {
+        $formId = uniqid();
+        $_SESSION['forms'][$formId] = [
+            'last_name' => $row['f_ln'],
+            'first_name' => $row['f_fn'],
+            'middle_name' => $row['f_mi'],
+            'date' => $row['f_dob'],
+            'gender' => $row['f_sex'],
+            'civil_status' => $row['f_civil'],
+            'tin' => $row['f_tin'],
+            'nationality' => $row['f_nationality'],
+            'religion' => $row['f_religion'],
+            'rm_flr_unit_no' => $row['f_pob_bldg'],
+            'house_lot_blk_no' => $row['f_pob_lot'],
+            'street_name' => $row['f_pob_street'],
+            'subdivision' => $row['f_pob_subdivision'],
+            'barangay' => $row['f_pob_barangay'],
+            'city' => $row['f_pob_city'],
+            'province' => $row['f_pob_province'],
+            'country' => $row['f_pob_country'],
+            'zip_code' => $row['f_pob_zip'],
+            'home_rm_flr_unit_no' => $row['f_home_bldg'],
+            'home_house_lot_blk_no' => $row['f_home_lot'],
+            'home_street_name' => $row['f_home_street'],
+            'home_subdivision' => $row['f_home_subdivision'],
+            'home_barangay' => $row['f_home_barangay'],
+            'home_city' => $row['f_home_city'],
+            'home_province' => $row['f_home_province'],
+            'home_country' => $row['f_home_country'],
+            'home_zip_code' => $row['f_home_zip'],
+            'mobile_number' => $row['f_home_mobile'],
+            'email_address' => $row['f_home_email'],
+            'telephone_number' => $row['f_home_telephone'],
+            'father_last_name' => $row['f_father_ln'],
+            'father_first_name' => $row['f_father_fn'],
+            'father_middle_name' => $row['f_father_mi'],
+            'mother_last_name' => $row['f_mother_ln'],
+            'mother_first_name' => $row['f_mother_fn'],
+            'mother_middle_name' => $row['f_mother_mi'],
+            'f_id' => $row['f_id'],
+            'submission_date' => date('Y-m-d H:i:s'),
+            'status' => 'pending'
+        ];
+    }
+    $stmt->close();
 }
 
 $message = '';
@@ -352,16 +311,19 @@ function calculateAge($dob)
                             <i class="fas fa-user"></i>
                             <?php echo htmlspecialchars($viewForm['last_name'] . ', ' . $viewForm['first_name'] . ' ' . ($viewForm['middle_name'] ?? '')); ?>
                             <?php if (isset($viewForm['f_id'])): ?>
-                                <span class="form-id" >(ID: <?php echo htmlspecialchars($viewForm['f_id']); ?>)</span>
+                                <span class="form-id">(ID: <?php echo htmlspecialchars($viewForm['f_id']); ?>)</span>
                             <?php endif; ?>
                         </h2>
                         <div class="view-actions">
                             <a href="viewForms.php" class="btn secondary">
                                 <i class="fas fa-arrow-left"></i> Back to List
                             </a>
-                            <a href="viewForms.php?action=edit&id=<?php echo $viewFormId; ?>" class="btn primary">
-                                <i class="fas fa-edit"></i> Edit
-                            </a>
+                            <form method="post" action="viewForms.php" style="display: inline;">
+                                <input type="hidden" name="form_id" value="<?php echo $viewFormId; ?>">
+                                <button type="submit" name="update_form" class="btn primary">
+                                    <i class="fas fa-edit"></i> Edit
+                                </button>
+                            </form>
                         </div>
                     </div>
 
@@ -644,9 +606,12 @@ function calculateAge($dob)
                                         <a href="viewForms.php?action=view&id=<?php echo $id; ?>" class="view-btn">
                                             <i class="fas fa-eye"></i> View
                                         </a>
-                                        <a href="viewForms.php?action=edit&id=<?php echo $id; ?>" class="edit-btn">
-                                            <i class="fas fa-edit"></i> Edit
-                                        </a>
+                                        <form method="post" action="viewForms.php" style="display: inline;">
+                                            <input type="hidden" name="form_id" value="<?php echo $id; ?>">
+                                            <button type="submit" name="update_form" class="edit-btn">
+                                                <i class="fas fa-edit"></i> Edit
+                                            </button>
+                                        </form>
                                         <a href="viewForms.php?action=delete&id=<?php echo $id; ?>" class="delete-btn"
                                             onclick="return confirm('Are you sure you want to delete this form? This will also delete the data from the database.');">
                                             <i class="fas fa-trash-alt"></i> Delete
