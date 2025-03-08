@@ -1,41 +1,23 @@
 <?php
 session_start();
 
+require_once 'DBConnector.php';
+require_once 'Form.php';
+require_once 'FormValidator.php';
+require_once 'FormManager.php';
+
+$db = new DatabaseConnection("localhost", "root", "", "form_db");
+$formManager = new FormManager($db);
+
 if (!isset($_SESSION['forms'])) {
     $_SESSION['forms'] = [];
-}
-
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "form_db";
-
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
-}
-
-function validate_input($data)
-{
-    $data = trim($data);
-    $data = stripslashes($data);
-    $data = htmlspecialchars($data);
-    return $data;
-}
-
-function normalize_spaces($data)
-{
-    if (is_string($data)) {
-        return preg_replace('/\s+/', ' ', trim($data));
-    }
-    return $data;
 }
 
 $editMode = false;
 $editFormId = '';
 $formData = [];
 $formDbId = null;
+$errors = [];
 
 if (isset($_GET['edit']) && $_GET['edit'] === 'true' && isset($_SESSION['edit_form']) && isset($_SESSION['edit_form_id'])) {
     $editMode = true;
@@ -51,268 +33,44 @@ if (isset($_GET['edit']) && $_GET['edit'] === 'true' && isset($_SESSION['edit_fo
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
-    $errors = [];
-
-    $required_fields = [
-        'last_name' => 'Last Name',
-        'first_name' => 'First Name',
-        'date' => 'Date of Birth',
-        'gender' => 'Gender',
-        'civil_status' => 'Civil Status',
-        'mobile_number' => 'Mobile Number',
-        'email_address' => 'Email Address'
-    ];
-
-    foreach ($_POST as $key => $value) {
-        if (is_string($value)) {
-            $_POST[$key] = normalize_spaces($value);
-        }
-    }
-
-    foreach ($required_fields as $field => $label) {
-        if (empty(trim($_POST[$field] ?? ''))) {
-            $errors[$field] = "$label is required.";
-        }
-    }
-
-    if (!empty($_POST['last_name']) && !preg_match("/^[a-zA-Z ]*$/", $_POST['last_name'])) {
-        $errors['last_name'] = "Last Name must contain letters only.";
-    }
-
-    if (!empty($_POST['first_name']) && !preg_match("/^[a-zA-Z ]*$/", $_POST['first_name'])) {
-        $errors['first_name'] = "First Name must contain letters only.";
-    }
-
-    if (!empty($_POST['middle_name']) && !preg_match("/^[a-zA-Z ]*$/", $_POST['middle_name'])) {
-        $errors['middle_name'] = "Middle Name must contain letters only.";
-    }
-
-    if (!empty($_POST['date'])) {
-        $dob = strtotime($_POST['date']);
-        $current_year = date('Y');
-        $birth_year = date('Y', $dob);
-        $age = $current_year - $birth_year;
-
-        if ($age < 18) {
-            $errors['date'] = "You must be at least 18 years old.";
-        }
-    }
-
-    if (!empty($_POST['tin']) && !preg_match("/^[0-9]*$/", $_POST['tin'])) {
-        $errors['tin'] = "TIN must contain numbers only.";
-    }
-
-    if (!empty($_POST['mobile_number']) && !preg_match("/^[0-9]{11}$/", $_POST['mobile_number'])) {
-        $errors['mobile_number'] = "Mobile Number must be 11 digits.";
-    }
-
-    if (!empty($_POST['email_address']) && !filter_var($_POST['email_address'], FILTER_VALIDATE_EMAIL)) {
-        $errors['email_address'] = "Invalid email format.";
-    }
-
-    if (!empty($_POST['telephone_number']) && !preg_match("/^[0-9]*$/", $_POST['telephone_number'])) {
-        $errors['telephone_number'] = "Telephone Number must contain numbers only.";
-    }
-
-    if (!empty($_POST['zip_code']) && !preg_match("/^[0-9]*$/", $_POST['zip_code'])) {
-        $errors['zip_code'] = "Zip Code must contain numbers only.";
-    }
-
-    if (!empty($_POST['home_zip_code']) && !preg_match("/^[0-9]*$/", $_POST['home_zip_code'])) {
-        $errors['home_zip_code'] = "Home Zip Code must contain numbers only.";
-    }
-
-    if (isset($_POST['civil_status']) && $_POST['civil_status'] == 'others' && empty(trim($_POST['others'] ?? ''))) {
-        $errors['others'] = "Please specify your civil status.";
-    }
-
-    if (empty($errors)) {
-        $dob = new DateTime($_POST['date']);
-        $now = new DateTime();
-        $age = $now->diff($dob)->y;
-        
-        $conn->begin_transaction();
-        
+    $form = new Form($_POST);
+    
+    if ($formManager->validateForm($_POST)) {
         try {
             if (isset($_POST['db_id']) && !empty($_POST['db_id'])) {
-                $stmt = $conn->prepare("UPDATE form_tb SET 
-                    f_ln = ?, f_fn = ?, f_mi = ?, f_dob = ?, f_sex = ?, f_civil = ?, 
-                    f_tin = ?, f_nationality = ?, f_religion = ?,
-                    f_pob_bldg = ?, f_pob_lot = ?, f_pob_street = ?, f_pob_subdivision = ?, 
-                    f_pob_barangay = ?, f_pob_city = ?, f_pob_province = ?, f_pob_country = ?, f_pob_zip = ?,
-                    f_home_bldg = ?, f_home_lot = ?, f_home_street = ?, f_home_subdivision = ?, 
-                    f_home_barangay = ?, f_home_city = ?, f_home_province = ?, f_home_country = ?, f_home_zip = ?,
-                    f_home_mobile = ?, f_home_email = ?, f_home_telephone = ?,
-                    f_father_ln = ?, f_father_fn = ?, f_father_mi = ?,
-                    f_mother_ln = ?, f_mother_fn = ?, f_mother_mi = ?,
-                    f_age = ?
-                    WHERE f_id = ?");
-                
-                $last_name = $_POST['last_name'];
-                $first_name = $_POST['first_name'];
-                $middle_name = $_POST['middle_name'];
-                $date = $_POST['date'];
-                $gender = $_POST['gender'];
-                $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
-                $tin = $_POST['tin'];
-                $nationality = $_POST['nationality'];
-                $religion = $_POST['religion'];
-                
-                $pob_bldg = $_POST['rm_flr_unit_no'];
-                $pob_lot = $_POST['house_lot_blk_no'];
-                $pob_street = $_POST['street_name'];
-                $pob_subdivision = $_POST['subdivision'];
-                $pob_barangay = $_POST['barangay'];
-                $pob_city = $_POST['city'];
-                $pob_province = $_POST['province'];
-                $pob_country = $_POST['country'];
-                $pob_zip = $_POST['zip_code'];
-                
-                $home_bldg = $_POST['home_rm_flr_unit_no'];
-                $home_lot = $_POST['home_house_lot_blk_no'];
-                $home_street = $_POST['home_street_name'];
-                $home_subdivision = $_POST['home_subdivision'];
-                $home_barangay = $_POST['home_barangay'];
-                $home_city = $_POST['home_city'];
-                $home_province = $_POST['home_province'];
-                $home_country = $_POST['home_country'];
-                $home_zip = $_POST['home_zip_code'];
-                
-                $mobile_number = $_POST['mobile_number'];
-                $email_address = $_POST['email_address'];
-                $telephone_number = $_POST['telephone_number'];
-                
-                $father_last_name = $_POST['father_last_name'];
-                $father_first_name = $_POST['father_first_name'];
-                $father_middle_name = $_POST['father_middle_name'];
-                
-                $mother_last_name = $_POST['mother_last_name'];
-                $mother_first_name = $_POST['mother_first_name'];
-                $mother_middle_name = $_POST['mother_middle_name'];
-                
-                $db_id = $_POST['db_id'];
-                
-                $stmt->bind_param("sssssssssssssssssssssssssssssssssssssi", 
-                    $last_name, $first_name, $middle_name, $date, $gender, $civil_status, $tin, $nationality, $religion,
-                    $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
-                    $home_bldg, $home_lot, $home_street, $home_subdivision, $home_barangay, $home_city, $home_province, $home_country, $home_zip,
-                    $mobile_number, $email_address, $telephone_number,
-                    $father_last_name, $father_first_name, $father_middle_name,
-                    $mother_last_name, $mother_first_name, $mother_middle_name,
-                    $age, $db_id
-                );
-                
-                $stmt->execute();
-                $form_id = $db_id;
-                $stmt->close();
-                
+                $form->setDbId($_POST['db_id']);
+                $formManager->updateForm($form);
                 $_SESSION['message'] = "Form updated successfully in database!";
             } else {
-                $stmt = $conn->prepare("INSERT INTO form_tb (
-                    f_ln, f_fn, f_mi, f_dob, f_sex, f_civil, f_tin, f_nationality, f_religion,
-                    f_pob_bldg, f_pob_lot, f_pob_street, f_pob_subdivision, f_pob_barangay, f_pob_city, f_pob_province, f_pob_country, f_pob_zip,
-                    f_home_bldg, f_home_lot, f_home_street, f_home_subdivision, f_home_barangay, f_home_city, f_home_province, f_home_country, f_home_zip,
-                    f_home_mobile, f_home_email, f_home_telephone,
-                    f_father_ln, f_father_fn, f_father_mi,
-                    f_mother_ln, f_mother_fn, f_mother_mi,
-                    f_age
-                ) VALUES (
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?, ?, ?, ?, ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?, ?, ?,
-                    ?
-                )");
-                
-                $last_name = $_POST['last_name'];
-                $first_name = $_POST['first_name'];
-                $middle_name = $_POST['middle_name'];
-                $date = $_POST['date'];
-                $gender = $_POST['gender'];
-                $civil_status = $_POST['civil_status'] == 'others' ? $_POST['others'] : $_POST['civil_status'];
-                $tin = $_POST['tin'];
-                $nationality = $_POST['nationality'];
-                $religion = $_POST['religion'];
-                
-                $pob_bldg = $_POST['rm_flr_unit_no'];
-                $pob_lot = $_POST['house_lot_blk_no'];
-                $pob_street = $_POST['street_name'];
-                $pob_subdivision = $_POST['subdivision'];
-                $pob_barangay = $_POST['barangay'];
-                $pob_city = $_POST['city'];
-                $pob_province = $_POST['province'];
-                $pob_country = $_POST['country'];
-                $pob_zip = $_POST['zip_code'];
-                
-                $home_bldg = $_POST['home_rm_flr_unit_no'];
-                $home_lot = $_POST['home_house_lot_blk_no'];
-                $home_street = $_POST['home_street_name'];
-                $home_subdivision = $_POST['home_subdivision'];
-                $home_barangay = $_POST['home_barangay'];
-                $home_city = $_POST['home_city'];
-                $home_province = $_POST['home_province'];
-                $home_country = $_POST['home_country'];
-                $home_zip = $_POST['home_zip_code'];
-                
-                $mobile_number = $_POST['mobile_number'];
-                $email_address = $_POST['email_address'];
-                $telephone_number = $_POST['telephone_number'];
-                
-                $father_last_name = $_POST['father_last_name'];
-                $father_first_name = $_POST['father_first_name'];
-                $father_middle_name = $_POST['father_middle_name'];
-                
-                $mother_last_name = $_POST['mother_last_name'];
-                $mother_first_name = $_POST['mother_first_name'];
-                $mother_middle_name = $_POST['mother_middle_name'];
-                
-                $stmt->bind_param("ssssssssssssssssssssssssssssssssssssi", 
-                    $last_name, $first_name, $middle_name, $date, $gender, $civil_status, $tin, $nationality, $religion,
-                    $pob_bldg, $pob_lot, $pob_street, $pob_subdivision, $pob_barangay, $pob_city, $pob_province, $pob_country, $pob_zip,
-                    $home_bldg, $home_lot, $home_street, $home_subdivision, $home_barangay, $home_city, $home_province, $home_country, $home_zip,
-                    $mobile_number, $email_address, $telephone_number,
-                    $father_last_name, $father_first_name, $father_middle_name,
-                    $mother_last_name, $mother_first_name, $mother_middle_name,
-                    $age
-                );
-                
-                $stmt->execute();
-                $form_id = $conn->insert_id;
-                $stmt->close();
-                
+                $form_id = $formManager->addForm($form);
+                $form->setDbId($form_id);
                 $_SESSION['message'] = "Form added successfully and saved to database!";
             }
             
-            $conn->commit();
-            
-            $_POST['submission_date'] = date('Y-m-d H:i:s');
+            $form->setSubmissionDate(date('Y-m-d H:i:s'));
             if (!isset($_POST['status'])) {
-                $_POST['status'] = 'pending';
+                $form->setStatus('pending');
             }
 
             if (isset($_POST['form_id']) && $_POST['form_id']) {
                 $formId = $_POST['form_id'];
                 if (isset($_SESSION['forms'][$formId])) {
-                    $_SESSION['forms'][$formId] = $_POST;
-                    $_SESSION['forms'][$formId]['f_id'] = $form_id;
+                    $_SESSION['forms'][$formId] = $form->toArray();
                 }
             } else {
                 $formId = uniqid();
-                $_SESSION['forms'][$formId] = $_POST;
-                $_SESSION['forms'][$formId]['f_id'] = $form_id;
+                $_SESSION['forms'][$formId] = $form->toArray();
             }
 
             header("Location: index.php");
             exit();
             
         } catch (Exception $e) {
-            $conn->rollback();
             $_SESSION['message'] = "Error: " . $e->getMessage();
             $formData = $_POST;
         }
     } else {
+        $errors = $formManager->getValidationErrors();
         $formData = $_POST;
     }
 }
@@ -324,7 +82,6 @@ if (isset($_SESSION['message'])) {
 }
 
 $countries = ["Afghanistan", "Albania", "Algeria", "Andorra", "Angola", "Antigua and Barbuda", "Argentina", "Armenia", "Australia", "Austria", "Azerbaijan", "Bahamas", "Bahrain", "Bangladesh", "Barbados", "Belarus", "Belgium", "Belize", "Benin", "Bhutan", "Bolivia", "Bosnia and Herzegovina", "Botswana", "Brazil", "Brunei", "Bulgaria", "Burkina Faso", "Burundi", "Cabo Verde", "Cambodia", "Cameroon", "Canada", "Central African Republic", "Chad", "Chile", "China", "Colombia", "Comoros", "Congo, Democratic Republic of the", "Congo, Republic of the", "Costa Rica", "Croatia", "Cuba", "Cyprus", "Czech Republic", "Denmark", "Djibouti", "Dominica", "Dominican Republic", "Ecuador", "Egypt", "El Salvador", "Equatorial Guinea", "Eritrea", "Estonia", "Eswatini", "Ethiopia", "Fiji", "Finland", "France", "Gabon", "Gambia", "Georgia", "Germany", "Ghana", "Greece", "Grenada", "Guatemala", "Guinea", "Guinea-Bissau", "Guyana", "Haiti", "Honduras", "Hungary", "Iceland", "India", "Indonesia", "Iran", "Iraq", "Ireland", "Israel", "Italy", "Jamaica", "Japan", "Jordan", "Kazakhstan", "Kenya", "Kiribati", "Korea, North", "Korea, South", "Kosovo", "Kuwait", "Kyrgyzstan", "Laos", "Latvia", "Lebanon", "Lesotho", "Liberia", "Libya", "Liechtenstein", "Lithuania", "Luxembourg", "Madagascar", "Malawi", "Malaysia", "Maldives", "Mali", "Malta", "Marshall Islands", "Mauritania", "Mauritius", "Mexico", "Micronesia", "Moldova", "Monaco", "Mongolia", "Montenegro", "Morocco", "Mozambique", "Myanmar", "Namibia", "Nauru", "Nepal", "Netherlands", "New Zealand", "Nicaragua", "Niger", "Nigeria", "North Macedonia", "Norway", "Oman", "Pakistan", "Palau", "Palestine", "Panama", "Papua New Guinea", "Paraguay", "Peru", "Philippines", "Poland", "Portugal", "Qatar", "Romania", "Russia", "Rwanda", "Saint Kitts and Nevis", "Saint Lucia", "Saint Vincent and the Grenadines", "Samoa", "San Marino", "Sao Tome and Principe", "Saudi Arabia", "Senegal", "Serbia", "Seychelles", "Sierra Leone", "Singapore", "Slovakia", "Slovenia", "Solomon Islands", "Somalia", "South Africa", "South Sudan", "Spain", "Sri Lanka", "Sudan", "Suriname", "Sweden", "Switzerland", "Syria", "Taiwan", "Tajikistan", "Tanzania", "Thailand", "Timor-Leste", "Togo", "Tonga", "Trinidad and Tobago", "Tunisia", "Turkey", "Turkmenistan", "Tuvalu", "Uganda", "Ukraine", "United Arab Emirates", "United Kingdom", "United States", "Uruguay", "Uzbekistan", "Vanuatu", "Vatican City", "Venezuela", "Vietnam", "Yemen", "Zambia", "Zimbabwe"];
-
 
 function hasError($field)
 {

@@ -1,19 +1,15 @@
 <?php
 session_start();
 
+require_once 'DBConnector.php';
+require_once 'Form.php';
+require_once 'FormManager.php';
+
+$db = new DatabaseConnection("localhost", "root", "", "form_db");
+$formManager = new FormManager($db);
+
 if (!isset($_SESSION['forms'])) {
     $_SESSION['forms'] = [];
-}
-
-$servername = "localhost";
-$username = "root";
-$password = "";
-$dbname = "form_db";
-
-$conn = new mysqli($servername, $username, $password, $dbname);
-
-if ($conn->connect_error) {
-    die("Connection failed: " . $conn->connect_error);
 }
 
 if (isset($_GET['action'])) {
@@ -22,40 +18,30 @@ if (isset($_GET['action'])) {
     
     if ($action === 'delete' && $formId && isset($_SESSION['forms'][$formId])) {
         try {
-            $conn->begin_transaction();
             $form = $_SESSION['forms'][$formId];
             
             if (isset($form['f_id'])) {
                 $form_id = $form['f_id'];
-                $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
-                $delete_stmt->bind_param("i", $form_id);
-                $delete_stmt->execute();
-                $delete_stmt->close();
+                $formManager->deleteForm($form_id);
                 
                 unset($_SESSION['forms'][$formId]);
                 $_SESSION['message'] = "Form deleted successfully from database!";
-                $conn->commit();
             } else {
-                $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
+                $stmt = $db->getConnection()->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
                 $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
                 $stmt->execute();
                 $result = $stmt->get_result();
                 
                 if ($row = $result->fetch_assoc()) {
                     $form_id = $row['f_id'];
-                    $delete_stmt = $conn->prepare("DELETE FROM form_tb WHERE f_id = ?");
-                    $delete_stmt->bind_param("i", $form_id);
-                    $delete_stmt->execute();
-                    $delete_stmt->close();
+                    $formManager->deleteForm($form_id);
                 }
                 
                 unset($_SESSION['forms'][$formId]);
                 $_SESSION['message'] = "Form deleted successfully!";
                 $stmt->close();
-                $conn->commit();
             }
         } catch (Exception $e) {
-            $conn->rollback();
             $_SESSION['message'] = "Error deleting form: " . $e->getMessage();
         }
         header("Location: viewForms.php");
@@ -79,23 +65,19 @@ if (isset($_GET['action'])) {
 
 if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION['forms'][$_POST['form_id']])) {
     try {
-        $conn->begin_transaction();
         $formId = $_POST['form_id'];
         $form = $_SESSION['forms'][$formId];
         
         if (isset($form['f_id'])) {
-            $db_id = $form['f_id'];
             $_SESSION['edit_form'] = $form;
             $_SESSION['edit_form_id'] = $formId;
             
-            $conn->commit();
             header("Location: addForms.php?edit=true");
             exit();
         } else {
             $_SESSION['message'] = "Error: Could not find the database record to update.";
         }
     } catch (Exception $e) {
-        $conn->rollback();
         $_SESSION['message'] = "Error preparing form for update: " . $e->getMessage();
     }
     
@@ -105,7 +87,7 @@ if (isset($_POST['update_form']) && isset($_POST['form_id']) && isset($_SESSION[
 
 foreach ($_SESSION['forms'] as $id => &$form) {
     if (!isset($form['f_id'])) {
-        $stmt = $conn->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
+        $stmt = $db->getConnection()->prepare("SELECT f_id FROM form_tb WHERE f_ln = ? AND f_fn = ? AND f_mi = ? AND f_dob = ?");
         $stmt->bind_param("ssss", $form['last_name'], $form['first_name'], $form['middle_name'], $form['date']);
         $stmt->execute();
         $result = $stmt->get_result();
@@ -118,55 +100,12 @@ foreach ($_SESSION['forms'] as $id => &$form) {
 }
 
 if (empty($_SESSION['forms'])) {
-    $stmt = $conn->prepare("SELECT * FROM form_tb");
-    $stmt->execute();
-    $result = $stmt->get_result();
+    $forms = $formManager->getAllForms();
     
-    while ($row = $result->fetch_assoc()) {
+    foreach ($forms as $form) {
         $formId = uniqid();
-        $_SESSION['forms'][$formId] = [
-            'last_name' => $row['f_ln'],
-            'first_name' => $row['f_fn'],
-            'middle_name' => $row['f_mi'],
-            'date' => $row['f_dob'],
-            'gender' => $row['f_sex'],
-            'civil_status' => $row['f_civil'],
-            'tin' => $row['f_tin'],
-            'nationality' => $row['f_nationality'],
-            'religion' => $row['f_religion'],
-            'rm_flr_unit_no' => $row['f_pob_bldg'],
-            'house_lot_blk_no' => $row['f_pob_lot'],
-            'street_name' => $row['f_pob_street'],
-            'subdivision' => $row['f_pob_subdivision'],
-            'barangay' => $row['f_pob_barangay'],
-            'city' => $row['f_pob_city'],
-            'province' => $row['f_pob_province'],
-            'country' => $row['f_pob_country'],
-            'zip_code' => $row['f_pob_zip'],
-            'home_rm_flr_unit_no' => $row['f_home_bldg'],
-            'home_house_lot_blk_no' => $row['f_home_lot'],
-            'home_street_name' => $row['f_home_street'],
-            'home_subdivision' => $row['f_home_subdivision'],
-            'home_barangay' => $row['f_home_barangay'],
-            'home_city' => $row['f_home_city'],
-            'home_province' => $row['f_home_province'],
-            'home_country' => $row['f_home_country'],
-            'home_zip_code' => $row['f_home_zip'],
-            'mobile_number' => $row['f_home_mobile'],
-            'email_address' => $row['f_home_email'],
-            'telephone_number' => $row['f_home_telephone'],
-            'father_last_name' => $row['f_father_ln'],
-            'father_first_name' => $row['f_father_fn'],
-            'father_middle_name' => $row['f_father_mi'],
-            'mother_last_name' => $row['f_mother_ln'],
-            'mother_first_name' => $row['f_mother_fn'],
-            'mother_middle_name' => $row['f_mother_mi'],
-            'f_id' => $row['f_id'],
-            'submission_date' => date('Y-m-d H:i:s'),
-            'status' => 'pending'
-        ];
+        $_SESSION['forms'][$formId] = $form->toArray();
     }
-    $stmt->close();
 }
 
 $message = '';
